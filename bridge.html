@@ -45,12 +45,11 @@
         }
 
         var url =
-          "https://api.deadlock-api.com/v1/players/" +
-          encodeURIComponent(account) +
-          "/hero-stats";
-        if (mode === "ranked" || mode === "unranked") {
-          url += (url.indexOf("?") >= 0 ? "&" : "?") + "match_mode=" + encodeURIComponent(mode);
-        }
+          "https://api.deadlock-api.com/v1/players/hero-stats?account_ids=" +
+          encodeURIComponent(account);
+        if (mode === "ranked") url += "&match_mode=ranked";
+        else if (mode === "unranked") url += "&match_mode=unranked";
+        else url += "&match_mode=ranked,unranked";
 
         fetch(url)
           .then(function (r) {
@@ -61,31 +60,29 @@
             var rows = data;
             if (!rows) rows = [];
             if (Object.prototype.toString.call(rows) !== "[object Array]") {
-              if (rows.matches_played != null) {
-                send({
-                  ok: 1,
-                  a: Number(account),
-                  n: Number(rows.matches_played) || 0,
-                  mode: mode,
-                  request: request
-                });
-                return;
-              }
               rows = rows.heroes || rows.stats || rows.data || [];
             }
             var n = 0;
+            var w = 0;
             var i;
             var acc = String(account);
             for (i = 0; i < rows.length; i += 1) {
               var row = rows[i];
               if (!row) continue;
               if (row.account_id != null && String(row.account_id) !== acc) continue;
-              var mm = String(row.match_mode || row.mode || "");
-              if (mode === "ranked" && mm && mm !== "ranked") continue;
-              if (mode === "unranked" && mm && mm !== "unranked") continue;
               n += Number(row.matches_played) || 0;
+              w += Number(row.wins) || 0;
             }
-            send({ ok: 1, a: Number(account), n: n, mode: mode, request: request });
+            var wr = n > 0 ? Math.round((1000 * w) / n) / 10 : 0;
+            send({
+              ok: 1,
+              a: Number(account),
+              n: n,
+              w: w,
+              wr: wr,
+              mode: mode,
+              request: request
+            });
           })
           .catch(function (err) {
             send({
