@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>SHOWRANK:wait</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #101214;
+        color: #e8e8e8;
+        font: 16px/1.4 sans-serif;
+      }
+      #out {
+        padding: 16px;
+        word-break: break-all;
+      }
+    </style>
+  </head>
+  <body>
+    <pre id="out">loading</pre>
+    <script>
+      (function () {
+        var PREFIX = "SHOWRANK:";
+        var MAX = 2048;
+        var params = new URLSearchParams(location.search || "");
+        var account = String(params.get("account_id") || "").trim();
+        var request = String(params.get("request") || "").trim();
+        var mode = String(params.get("mode") || "all").trim() || "all";
+        var out = document.getElementById("out");
+
+        function send(obj) {
+          var title = PREFIX + JSON.stringify(obj);
+          if (title.length > MAX) title = PREFIX + '{"ok":0,"err":"too_big"}';
+          document.title = title;
+          try {
+            location.hash = encodeURIComponent(title);
+          } catch (e) {}
+          if (out) out.textContent = title;
+        }
+
+        if (!/^[1-9][0-9]{4,10}$/.test(account)) {
+          send({ ok: 0, err: "bad_account", request: request });
+          return;
+        }
+
+        var url =
+          "https://api.deadlock-api.com/v1/players/" +
+          encodeURIComponent(account) +
+          "/hero-stats";
+        if (mode === "ranked" || mode === "unranked") {
+          url += (url.indexOf("?") >= 0 ? "&" : "?") + "match_mode=" + encodeURIComponent(mode);
+        }
+
+        fetch(url)
+          .then(function (r) {
+            if (!r.ok) throw r.status;
+            return r.json();
+          })
+          .then(function (data) {
+            var rows = data;
+            if (!rows) rows = [];
+            if (Object.prototype.toString.call(rows) !== "[object Array]") {
+              if (rows.matches_played != null) {
+                send({
+                  ok: 1,
+                  a: Number(account),
+                  n: Number(rows.matches_played) || 0,
+                  mode: mode,
+                  request: request
+                });
+                return;
+              }
+              rows = rows.heroes || rows.stats || rows.data || [];
+            }
+            var n = 0;
+            var i;
+            var acc = String(account);
+            for (i = 0; i < rows.length; i += 1) {
+              var row = rows[i];
+              if (!row) continue;
+              if (row.account_id != null && String(row.account_id) !== acc) continue;
+              var mm = String(row.match_mode || row.mode || "");
+              if (mode === "ranked" && mm && mm !== "ranked") continue;
+              if (mode === "unranked" && mm && mm !== "unranked") continue;
+              n += Number(row.matches_played) || 0;
+            }
+            send({ ok: 1, a: Number(account), n: n, mode: mode, request: request });
+          })
+          .catch(function (err) {
+            send({
+              ok: 0,
+              a: Number(account),
+              err: "fetch",
+              status: typeof err === "number" ? err : 0,
+              request: request
+            });
+          });
+      })();
+    </script>
+  </body>
+</html>
